@@ -1,0 +1,10 @@
+.gradle/
+.gradle-user/
+build/
+run/
+.idea/
+*.iml
+*.hprof
+hs_err_*.log
+/Kingdoms-of-Eternia-RPG-*.jar
+/Kingdoms-of-Eternia-RPG-fase*-source.zip

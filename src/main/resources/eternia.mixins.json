@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.eternia.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "PlayerRelicDropMixin",
+    "RelicSlotMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

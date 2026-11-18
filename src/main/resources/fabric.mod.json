@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "eternia",
+  "version": "${version}",
+  "name": "Kingdoms of Eternia RPG",
+  "description": "Modular RPG progression, races and classes for Minecraft.",
+  "authors": ["Kingdoms of Eternia RPG contributors"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.eternia.core.EterniaMod"],
+    "client": ["dev.eternia.ui.EterniaClient"]
+  },
+  "mixins": ["eternia.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.20.1",
+    "minecraft": "~26.2",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
