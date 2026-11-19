@@ -22,9 +22,9 @@ import dev.eternia.relics.RelicData;
 import dev.eternia.relics.RelicForm;
 import dev.eternia.core.network.RelicFormPayload;
 import dev.eternia.dungeons.DungeonData;
-import dev.eternia.core.network.DungeonStartPayload;
 import dev.eternia.races.Race;
 import dev.eternia.skills.ActiveSkill;
+import dev.eternia.mana.ManaService;
 import dev.eternia.talents.TalentBranch;
 import dev.eternia.talents.TalentData;
 import dev.eternia.talents.TalentNode;
@@ -42,7 +42,6 @@ public final class CharacterCreationScreen extends Screen {
     private Race selectedRace = Race.HUMAN;
     private PlayerClass selectedClass = PlayerClass.WARRIOR;
     private Specialization selectedSpecialization = Specialization.KNIGHT;
-    private TalentBranch selectedBranch = TalentBranch.WARRIOR_DEFENSE;
 
     public CharacterCreationScreen() {
         super(Component.literal("Kingdoms of Eternia RPG"));
@@ -57,7 +56,6 @@ public final class CharacterCreationScreen extends Screen {
                 Specialization specialization = Specialization.fromId(profile.specializationId());
                 if (specialization != null) selectedSpecialization = specialization;
                 else if (playerClass != null) selectedSpecialization = Specialization.forClass(playerClass).getFirst();
-                if (playerClass != null) selectedBranch = TalentBranch.forClass(playerClass)[0];
             }
         }
     }
@@ -129,22 +127,26 @@ public final class CharacterCreationScreen extends Screen {
 
     private void initTalentSheet() {
         TalentBranch[] branches = TalentBranch.forClass(PlayerClass.fromId(CharacterData.get(this.minecraft.player).classId()));
-        int gap = 4;
-        int width = (this.width - 16 - gap * (branches.length - 1)) / branches.length;
-        for (int i = 0; i < branches.length; i++) {
-            TalentBranch branch = branches[i];
-            this.addRenderableWidget(Button.builder(Component.literal(branch.displayName()), button -> {
-                selectedBranch = branch;
-                rebuildWidgets();
-            }).bounds(8 + i * (width + gap), 21, width, 20).build());
-        }
+        int gap = 6;
+        int columnWidth = (this.width - 16 - gap * (branches.length - 1)) / branches.length;
         addPageNavigation(this.height - 22);
-
-        for (int i = 0; i < TalentNode.forBranch(selectedBranch).size(); i++) {
-            TalentNode node = TalentNode.forBranch(selectedBranch).get(i);
-            int y = 53 + i * 50;
-            this.addRenderableWidget(Button.builder(Component.literal("Mejorar"), button -> upgradeTalent(node))
-                    .bounds(this.width - 76, y, 68, 20).build());
+        for (int column = 0; column < branches.length; column++) {
+            TalentBranch branch = branches[column];
+            int x = 8 + column * (columnWidth + gap);
+            for (int row = 0; row < TalentNode.forBranch(branch).size(); row++) {
+                TalentNode node = TalentNode.forBranch(branch).get(row);
+                int y = 83 + row * 76;
+                Button improve = Button.builder(Component.literal("Mejorar"), button -> upgradeTalent(node))
+                        .bounds(x + (columnWidth - 82) / 2, y + 37, 82, 18).build();
+                TalentData talentData = TalentService.get(this.minecraft.player);
+                var branchNodes = TalentNode.forBranch(branch);
+                int index = branchNodes.indexOf(node);
+                boolean previousUnlocked = index == 0 || talentData.rank(branchNodes.get(index - 1)) > 0;
+                improve.active = talentData.talentPoints() > 0
+                        && ProgressionData.get(this.minecraft.player).level() >= node.requiredLevel()
+                        && talentData.rank(node) < TalentNode.MAX_RANK && previousUnlocked;
+                this.addRenderableWidget(improve);
+            }
         }
     }
 
@@ -224,15 +226,6 @@ public final class CharacterCreationScreen extends Screen {
 
     private void initDungeonSheet() {
         addPageNavigation(this.height - 22);
-        DungeonData data = this.minecraft.player.getAttachedOrCreate(DungeonData.ATTACHMENT);
-        long now = this.minecraft.level == null ? 0 : this.minecraft.level.getGameTime();
-        boolean available = !data.active() && now >= data.availableAt();
-        String label = data.active() ? "Expedición activa"
-                : now < data.availableAt() ? "Ruina en descanso" : "Abrir una expedición";
-        Button start = Button.builder(Component.literal(label), button -> startDungeon())
-                .bounds(this.width / 2 - 100, this.height / 2 + 48, 200, 22).build();
-        start.active = available;
-        this.addRenderableWidget(start);
     }
 
     private void addPageNavigation(int y) {
@@ -267,12 +260,6 @@ public final class CharacterCreationScreen extends Screen {
     private void changeRelicForm(RelicForm form, boolean fuse) {
         if (this.minecraft.getConnection() != null) {
             ClientPlayNetworking.send(new RelicFormPayload(form.id(), fuse));
-        }
-    }
-
-    private void startDungeon() {
-        if (this.minecraft.getConnection() != null) {
-            ClientPlayNetworking.send(new DungeonStartPayload());
         }
     }
 
@@ -427,6 +414,10 @@ public final class CharacterCreationScreen extends Screen {
                 TalentNode talent = TalentNode.fromId(form.requiredTalentId());
                 graphics.text(this.font, "Talento requerido: " + (talent == null ? "?" : talent.displayName()),
                         8, y + 26, 0xFFB7D8FF, true);
+                if (form.requiredMonsterRemnantId() != null) {
+                    graphics.text(this.font, "Resto requerido: " + form.requiredMonsterRemnantName(),
+                            8, y + 52, 0xFF83DAFF, true);
+                }
             }
             graphics.text(this.font, "Habilidad: " + form.skillName() + " · Poder " + Math.round(form.skillPower() * 100) + "%",
                     8, y + 39, 0xFFFFD780, true);
@@ -436,23 +427,23 @@ public final class CharacterCreationScreen extends Screen {
     private void renderDungeonSheet(GuiGraphicsExtractor graphics) {
         DungeonData data = this.minecraft.player.getAttachedOrCreate(DungeonData.ATTACHMENT);
         int center = this.width / 2;
-        graphics.text(this.font, "RUINA DEL UMBRAL", center - 57, this.height / 2 - 79, 0xFFFFD780, true);
-        graphics.text(this.font, "Un laberinto de piedra distinto en cada expedición.", center - 131,
+        graphics.text(this.font, "RUINA DEL UMBRAL · ESTRUCTURA COMPARTIDA", center - 115, this.height / 2 - 79, 0xFFFFD780, true);
+        graphics.text(this.font, "Aparece de forma rara al explorar terreno nuevo del Overworld.", center - 157,
                 this.height / 2 - 55, 0xFFBBBBBB, true);
         if (data.active()) {
             graphics.text(this.font, "Expedición activa · entrada " + data.x() + " / " + data.y() + " / " + data.z(),
                     center - 153, this.height / 2 - 22, 0xFFFFFFFF, true);
             String status = data.bossDefeated()
-                    ? "Varkh cayó. Habla con Iriel para cobrar el sello."
-                    : "Busca a Iriel en la entrada; Varkh espera en la cámara oriental.";
+                    ? "Varkh cayó. Habla con Iriel para reclamar tu parte."
+                    : "Sigue el arco de piedra: el laberinto mide 41 × 41 y termina en la arena.";
             graphics.text(this.font, status, center - 151, this.height / 2, 0xFFB7D8FF, true);
         } else if (this.minecraft.level != null && this.minecraft.level.getGameTime() < data.availableAt()) {
             long ticks = data.availableAt() - this.minecraft.level.getGameTime();
             graphics.text(this.font, "La ruina se estabiliza en " + ((ticks + 19) / 20) + " segundos.",
                     center - 92, this.height / 2 - 12, 0xFFAAAAAA, true);
         } else {
-            graphics.text(this.font, "Explora el trazado, escucha el aviso de Varkh y regresa con Iriel.",
-                    center - 143, this.height / 2 - 12, 0xFFAAAAAA, true);
+            graphics.text(this.font, "No se abre desde un menú: busca la entrada tallada durante la exploración.",
+                    center - 163, this.height / 2 - 12, 0xFFAAAAAA, true);
         }
         graphics.text(this.font, "Recompensa: 1200 XP · 3000 Cobre · Sello del Guardián",
                 center - 139, this.height / 2 + 18, 0xFFFFD780, true);
@@ -462,18 +453,30 @@ public final class CharacterCreationScreen extends Screen {
         CharacterData.Profile profile = CharacterData.get(this.minecraft.player);
         PlayerClass playerClass = PlayerClass.fromId(profile.classId());
         TalentData data = TalentService.get(this.minecraft.player);
+        TalentBranch[] branches = TalentBranch.forClass(playerClass);
+        int gap = 6;
+        int columnWidth = (this.width - 16 - gap * (branches.length - 1)) / branches.length;
         graphics.text(this.font, "ÁRBOL DE TALENTOS · " + playerClass.displayName(), 8, 5, 0xFFFFD780, true);
-        graphics.text(this.font, "Puntos: " + data.talentPoints() + "    Ganas 1 punto cada 5 niveles", 8, 42, 0xFFB7D8FF, true);
-        var nodes = TalentNode.forBranch(selectedBranch);
-        for (int i = 0; i < nodes.size(); i++) {
-            TalentNode node = nodes.get(i);
-            int y = 56 + i * 50;
-            int rank = data.rank(node);
-            graphics.text(this.font, node.displayName() + "  " + rank + "/" + TalentNode.MAX_RANK,
-                    8, y, 0xFFFFFFFF, true);
-            graphics.text(this.font, node.description(), 8, y + 14, 0xFFBBBBBB, true);
-            String requirement = "Nivel " + node.requiredLevel() + " · rangos aplican a clase";
-            graphics.text(this.font, requirement, 8, y + 28, 0xFF888888, true);
+        graphics.text(this.font, "Puntos: " + data.talentPoints() + " · Tres ramas · cinco nodos por senda",
+                8, 22, 0xFFB7D8FF, true);
+        for (int column = 0; column < branches.length; column++) {
+            TalentBranch branch = branches[column];
+            int x = 8 + column * (columnWidth + gap);
+            int center = x + columnWidth / 2;
+            graphics.text(this.font, branch.displayName(), x + 2, 51, 0xFFFFD780, true);
+            var nodes = TalentNode.forBranch(branch);
+            for (int row = 0; row < nodes.size(); row++) {
+                TalentNode node = nodes.get(row);
+                int y = 83 + row * 76;
+                if (row < nodes.size() - 1) graphics.fill(center - 1, y + 6, center + 1, y + 76, 0xFF506379);
+                int rank = data.rank(node);
+                int color = rank > 0 ? 0xFF73D6B0 : 0xFF78889A;
+                graphics.fill(center - 5, y - 2, center + 5, y + 8, color);
+                graphics.text(this.font, node.displayName() + " " + rank + "/" + TalentNode.MAX_RANK,
+                        x + 4, y + 11, 0xFFFFFFFF, true);
+                graphics.text(this.font, node.description(), x + 4, y + 23, 0xFFBBBBBB, true);
+                graphics.text(this.font, "Nivel " + node.requiredLevel(), x + 4, y + 55, 0xFF8B9AAF, true);
+            }
         }
     }
 
@@ -502,6 +505,10 @@ public final class CharacterCreationScreen extends Screen {
         }
         graphics.text(this.font, "Puntos de atributo: " + progression.attributePoints(),
                 center - 90, top + 91, 0xFFFFD780, true);
+        graphics.text(this.font, "Maná: " + ManaService.current(this.minecraft.player) + "/"
+                        + ManaService.maximum(this.minecraft.player) + " · Regeneración "
+                        + ManaService.regenerationPerSecond(this.minecraft.player) + "/s",
+                center - 115, top + 72, 0xFF75DFFF, true);
         ActiveSkill activeSkill = ActiveSkill.forClass(playerClass);
         if (activeSkill != null) {
             graphics.text(this.font, "Habilidad [R]: " + activeSkill.displayName(), center - 85, top + 103, 0xFFB7D8FF, true);
@@ -516,7 +523,7 @@ public final class CharacterCreationScreen extends Screen {
             graphics.text(this.font, stat.displayName() + ": " + base + " + " + racial + " raza = " + effective,
                     center - 126, y, 0xFFFFFFFF, true);
         }
-        graphics.text(this.font, "R usa tu habilidad de clase · Nivel otorga 2 puntos de atributo",
+        graphics.text(this.font, "Mantén R para cargar · Nivel otorga 2 puntos de atributo",
                 center - 145, top + 204, 0xFFAAAAAA, true);
     }
 

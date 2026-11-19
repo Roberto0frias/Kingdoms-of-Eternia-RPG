@@ -10,6 +10,7 @@ import dev.eternia.progression.ProgressionData;
 import dev.eternia.races.Race;
 import dev.eternia.core.network.SpecializationChoicePayload;
 import dev.eternia.core.network.ActivateSkillPayload;
+import dev.eternia.core.network.ReleaseSkillPayload;
 import dev.eternia.core.network.TalentUpgradePayload;
 import dev.eternia.core.network.ShopPurchasePayload;
 import dev.eternia.economy.ShopService;
@@ -20,12 +21,14 @@ import dev.eternia.relics.ClassRelicItem;
 import dev.eternia.relics.RelicData;
 import dev.eternia.relics.RelicService;
 import dev.eternia.core.network.RelicFormPayload;
-import dev.eternia.core.network.DungeonStartPayload;
 import dev.eternia.dungeons.DungeonData;
 import dev.eternia.dungeons.DungeonService;
 import dev.eternia.dungeons.DungeonNpc;
 import dev.eternia.dungeons.DungeonBosses;
+import dev.eternia.dungeons.DungeonWorldgen;
 import dev.eternia.skills.SkillService;
+import dev.eternia.mana.ManaData;
+import dev.eternia.mana.ManaService;
 import dev.eternia.talents.TalentData;
 import dev.eternia.talents.TalentService;
 import dev.eternia.professions.Profession;
@@ -60,6 +63,7 @@ public final class EterniaMod implements ModInitializer {
     public void onInitialize() {
         CharacterData.register();
         ProgressionData.register();
+        ManaData.register();
         TalentData.register();
         ProfessionData.register();
         EconomyData.register();
@@ -67,16 +71,17 @@ public final class EterniaMod implements ModInitializer {
         RelicData.register();
         ClassRelicItem.register();
         DungeonData.register();
+        DungeonWorldgen.register();
         DungeonNpc.registerInteraction();
         PayloadTypeRegistry.serverboundPlay().register(CharacterChoicePayload.TYPE, CharacterChoicePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(AllocateAttributePayload.TYPE, AllocateAttributePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(SpecializationChoicePayload.TYPE, SpecializationChoicePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ActivateSkillPayload.TYPE, ActivateSkillPayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(ReleaseSkillPayload.TYPE, ReleaseSkillPayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(TalentUpgradePayload.TYPE, TalentUpgradePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ShopPurchasePayload.TYPE, ShopPurchasePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(QuestAcceptPayload.TYPE, QuestAcceptPayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(RelicFormPayload.TYPE, RelicFormPayload.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(DungeonStartPayload.TYPE, DungeonStartPayload.CODEC);
         ServerPlayNetworking.registerGlobalReceiver(CharacterChoicePayload.TYPE, (payload, context) -> {
             Race race = Race.fromId(payload.raceId());
             PlayerClass playerClass = PlayerClass.fromId(payload.classId());
@@ -126,7 +131,9 @@ public final class EterniaMod implements ModInitializer {
             player.sendSystemMessage(Component.literal("Especialización elegida: " + specialization.displayName() + "."));
         });
         ServerPlayNetworking.registerGlobalReceiver(ActivateSkillPayload.TYPE,
-                (payload, context) -> SkillService.activate(context.player()));
+                (payload, context) -> SkillService.beginCharge(context.player()));
+        ServerPlayNetworking.registerGlobalReceiver(ReleaseSkillPayload.TYPE,
+                (payload, context) -> SkillService.releaseCharge(context.player()));
         ServerPlayNetworking.registerGlobalReceiver(TalentUpgradePayload.TYPE, (payload, context) -> {
             ServerPlayer player = context.player();
             if (TalentService.upgrade(player, payload.nodeId())) {
@@ -142,8 +149,6 @@ public final class EterniaMod implements ModInitializer {
             if (payload.fuse()) RelicService.fuse(context.player(), payload.formId());
             else RelicService.select(context.player(), payload.formId());
         });
-        ServerPlayNetworking.registerGlobalReceiver(DungeonStartPayload.TYPE,
-                (payload, context) -> DungeonService.start(context.player()));
         ServerPlayerEvents.JOIN.register(player -> {
             PlayerAttributeService.refresh(player);
             RelicService.initialize(player);
@@ -159,13 +164,18 @@ public final class EterniaMod implements ModInitializer {
                 for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                     if (CharacterData.get(player).isCreated()) {
                         RelicService.ensureInventoryItem(player, RelicService.get(player));
+                        ManaService.regenerate(player);
                     }
                 }
             }
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) SkillService.tickCharge(player);
         });
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> ProfessionData.clearActionHistory(handler.player.getUUID()));
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+            ProfessionData.clearActionHistory(handler.player.getUUID());
+            SkillService.clearCharge(handler.player.getUUID());
+        });
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
-            if (entity.level().getServer() != null) DungeonService.onBossDeath(entity, entity.level().getServer());
+            if (entity.level().getServer() != null) DungeonService.onBossDeath(entity, damageSource, entity.level().getServer());
             if (!(entity instanceof Monster monster) || !(damageSource.getEntity() instanceof ServerPlayer player)) return;
             if (!CharacterData.get(player).isCreated()) return;
             int baseReward = Math.max(5, Math.min(100, 5 + (int) Math.ceil(monster.getMaxHealth() / 2.0)));

@@ -119,7 +119,20 @@ public final class RelicService {
             player.sendSystemMessage(Component.literal("Necesitas " + form.fusionItemName() + " para fusionar esta forma."));
             return;
         }
+        int remnantSlot = -1;
+        if (form.requiredMonsterRemnantId() != null) {
+            Item remnant = BuiltInRegistries.ITEM.get(Identifier.parse(form.requiredMonsterRemnantId()))
+                    .map(reference -> reference.value()).orElse(null);
+            if (remnant == null) return;
+            remnantSlot = findIngredient(player.getInventory(), remnant);
+            if (remnantSlot < 0) {
+                player.sendSystemMessage(Component.literal("También necesitas " + form.requiredMonsterRemnantName()
+                        + " para despertar esta forma."));
+                return;
+            }
+        }
         player.getInventory().removeItem(ingredientSlot, 1);
+        if (remnantSlot >= 0) player.getInventory().removeItem(remnantSlot, 1);
         data = data.unlock(form.id());
         player.setAttached(RelicData.ATTACHMENT, data);
         ensureInventoryItem(player, data);

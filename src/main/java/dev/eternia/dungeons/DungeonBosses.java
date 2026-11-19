@@ -7,6 +7,8 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.BossEvent;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -32,7 +34,8 @@ public final class DungeonBosses {
 
     private DungeonBosses() { }
 
-    public static Entity spawn(ServerLevel level, double x, double y, double z, String dungeonId, UUID owner) {
+    public static Entity spawn(ServerLevelAccessor accessor, double x, double y, double z, String dungeonId, UUID owner) {
+        ServerLevel level = accessor.getLevel();
         var type = BuiltInRegistries.ENTITY_TYPE.get(Identifier.withDefaultNamespace("wither_skeleton"))
                 .map(reference -> reference.value()).orElse(null);
         if (type == null) return null;
@@ -44,7 +47,8 @@ public final class DungeonBosses {
         boss.setPersistenceRequired();
         boss.setGlowingTag(true);
         boss.addTag(BOSS_TAG);
-        boss.addTag(OWNER_TAG + owner);
+        if (owner != null) boss.addTag(OWNER_TAG + owner);
+        else boss.addTag("eternia_world_dungeon");
         boss.addTag("eternia_dungeon=" + dungeonId);
         var health = boss.getAttribute(Attributes.MAX_HEALTH);
         var attack = boss.getAttribute(Attributes.ATTACK_DAMAGE);
@@ -57,8 +61,10 @@ public final class DungeonBosses {
         boss.setHealth(240.0F);
         boss.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.NETHERITE_SWORD));
         boss.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.NETHERITE_HELMET));
-        if (!level.addFreshEntity(boss)) return null;
-        ensureBar(boss);
+        if (accessor instanceof WorldGenRegion region) {
+            if (!region.addFreshEntity(boss)) return null;
+        } else if (!level.addFreshEntity(boss)) return null;
+        if (!(accessor instanceof WorldGenRegion)) ensureBar(boss);
         return boss;
     }
 

@@ -22,7 +22,7 @@ public record RelicForm(String id, PlayerClass playerClass, String name, String 
             form("mage_prism", PlayerClass.MAGE, "Prisma de Amatista", "La magia se curva; nunca obedece una sola dirección.", "minecraft:amethyst_shard", "minecraft:amethyst_shard", "Fragmento de amatista", "mage_ember", 5, 1.18, "Lanza Prismática"),
             form("mage_grimoire", PlayerClass.MAGE, "Grimorio del Umbral", "Sus páginas se escriben con tinta de sombra.", "minecraft:enchanted_book", "minecraft:book", "Libro", "mage_dark_pact", 15, 1.22, "Velo Umbrío"),
             form("archer_wayfinder", PlayerClass.ARCHER, "Arco del Trazasendas", "Su cuerda vibra al encontrar una ruta imposible.", "minecraft:bow", null, null, null, 1, 1.00, "Disparo Certero"),
-            form("archer_tempest", PlayerClass.ARCHER, "Ballesta de la Tempestad", "Cada virote lleva el eco de una tormenta.", "minecraft:crossbow", "minecraft:crossbow", "Ballesta", "archer_steady_hand", 5, 1.16, "Virote Tormentoso"),
+            form("archer_tempest", PlayerClass.ARCHER, "Arco de la Tempestad", "Cada flecha lleva el eco de una tormenta.", "minecraft:bow", "minecraft:crossbow", "Ballesta compatible", "archer_steady_hand", 5, 1.16, "Flecha Tormentosa"),
             form("archer_starfall", PlayerClass.ARCHER, "Arco de la Estrella Caída", "Su mira busca los puntos débiles del destino.", "minecraft:bow", "minecraft:bow", "Arco", "archer_long_shot", 15, 1.24, "Flecha Astral"),
             form("assassin_veil", PlayerClass.ASSASSIN, "Daga del Velo", "Su filo aparece donde la luz termina.", "minecraft:iron_sword", null, null, null, 1, 1.00, "Golpe Sombrío"),
             form("assassin_venom", PlayerClass.ASSASSIN, "Estilete de la Viuda", "Un veneno lento para una sentencia rápida.", "minecraft:diamond_sword", "minecraft:iron_sword", "Espada de hierro", "assassin_toxin_craft", 5, 1.18, "Herida Ponzoñosa"),
@@ -40,6 +40,35 @@ public record RelicForm(String id, PlayerClass playerClass, String name, String 
     }
 
     public boolean isBaseForm() { return fusionItemId == null; }
+    /** Monster remains let weapon forms require a matching hunting achievement. */
+    public String requiredMonsterRemnantId() {
+        return switch (id) {
+            case "warrior_cinder" -> "minecraft:bone";
+            case "warrior_bulwark" -> "minecraft:magma_cream";
+            case "mage_prism" -> "minecraft:glow_ink_sac";
+            case "mage_grimoire" -> "minecraft:bone";
+            case "archer_tempest" -> "minecraft:phantom_membrane";
+            case "archer_starfall" -> "minecraft:ender_pearl";
+            case "assassin_venom" -> "minecraft:spider_eye";
+            case "assassin_moon" -> "minecraft:phantom_membrane";
+            case "priest_aegis" -> "minecraft:rotten_flesh";
+            case "priest_judgment" -> "minecraft:blaze_rod";
+            default -> null;
+        };
+    }
+    public String requiredMonsterRemnantName() {
+        return switch (requiredMonsterRemnantId() == null ? "" : requiredMonsterRemnantId()) {
+            case "minecraft:bone" -> "hueso de esqueleto";
+            case "minecraft:magma_cream" -> "crema de magma";
+            case "minecraft:glow_ink_sac" -> "saco de tinta luminosa";
+            case "minecraft:phantom_membrane" -> "membrana de phantom";
+            case "minecraft:ender_pearl" -> "perla de ender";
+            case "minecraft:spider_eye" -> "ojo de araña";
+            case "minecraft:rotten_flesh" -> "carne podrida";
+            case "minecraft:blaze_rod" -> "vara de blaze";
+            default -> "resto de monstruo";
+        };
+    }
     public double attackDamage() { return 4.0 + Math.max(0.0, skillPower - 1.0) * 8.0; }
     public SkillStyle skillStyle() {
         return switch (id) {

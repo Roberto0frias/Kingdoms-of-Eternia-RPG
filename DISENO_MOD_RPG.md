@@ -7,15 +7,16 @@ Sistema RPG para Minecraft Java **26.2**, pensado para Fabric y Java 25. Transfo
 - **Fase 1 — completada:** proyecto Fabric, persistencia de raza/clase, creación de personaje con la tecla P.
 - **Fase 2 — MVP completado:** XP por derrotar hostiles directamente, niveles 1–200, dos puntos por nivel, asignación de seis atributos, persistencia/sincronización y bonificaciones raciales de estadísticas. Vitalidad, Resistencia, Fuerza, Agilidad y Suerte afectan atributos vanilla.
 - **Fase 3 — base de combate completada:** 15 especializaciones persistentes, desbloqueables al nivel 10, y una habilidad activa con cooldown por clase en R, con objetivo/daño/curación validados por el servidor.
-- **Fase 4 — talentos y oficios base:** 45 nodos iniciales (9 por clase) con tres ramas y hasta tres rangos; se obtiene un punto cada cinco niveles. Siete profesiones persistentes hasta nivel 100, con XP para minería, tala, agricultura y caza.
+- **Fase 4 — talentos y oficios base:** ahora 75 nodos (15 por clase) en tres sendas de cinco nodos y hasta tres rangos; se obtiene un punto cada cinco niveles. Siete profesiones persistentes hasta nivel 100, con XP para minería, tala, agricultura y caza.
 - **Fase 5 — economía inicial:** cartera persistente en Cobre, conversión de denominaciones en interfaz P y recompensas moderadas por matar mobs hostiles directamente. Sin compras todavía.
 - **Fase 6 — mercado RPG inicial:** catálogo de minería, agricultura y herrería; coste en Cobre y requisitos de nivel profesional comprobados por el servidor antes de cobrar y entregar. No modifica el comercio vanilla de aldeanos.
 - **Fase 7 — contratos de caza:** misiones repetibles de zombis, esqueletos y arañas; progreso persistente, una activa por jugador, nivel mínimo, pago de XP/Cobre y descanso de 24 000 ticks. El servidor controla aceptación, objetivo y pago.
-- **Fase 8 — Reliquias de clase:** objeto único enlazado a UUID y clase, protegido contra tirar/guardar; 3 formas por clase, árbol de talento + nivel + arma compatible consumida para fusionar; el objeto cambia modelo y escala la habilidad de R.
-- **Fase 9 — Ruina del Umbral:** laberinto procedural sobre terreno llano, Cartógrafo NPC con diálogo de expedición, guardián Varkh con barra, golpe de área anunciado y recompensa reclamable. Se genera desde P, con una expedición activa y un día de descanso.
-- **Siguiente:** estructura natural de mundo con variantes, mazmorras/rutas múltiples, NPC y jefes con modelos/animaciones propios, guilds/ciudades, contratos de exploración/recolección y mobs élite escalados.
+- **Fase 8 — Reliquias de clase:** objeto único enlazado a UUID y clase, protegido contra tirar/guardar; tres formas por clase, talento + nivel + arma compatible + resto de monstruo para fusionar; arma escala sus habilidades.
+- **Fase 9 — Ruina del Umbral:** primera mazmorra con Cartógrafo NPC, guardián Varkh con barra y golpe de área anunciado.
+- **Fase 10 — Maná, carga y mundo compartido:** maná persistente basado en Inteligencia, canalización de habilidades hasta dos segundos con más daño y coste, partículas de impacto, arco real para Arquero y flecha mágica si se queda sin munición. La Ruina pasa a worldgen raro compartido, mide 41×41 y termina en arena 7×7; hay cinco nodos por senda de talento y catalizadores de restos de monstruos para formas.
+- **Siguiente:** probar la generación natural en mundo nuevo/servidor, agregar variantes de ruina, modelos/animaciones propios, NPC/jefes adicionales, gremios/ciudades, contratos de exploración y mobs élite escalados.
 
-Alcance pendiente: árboles de talentos, habilidades raciales, maná, escalado de mobs por zona, balance final de la curva y efectos propios por especialización.
+Alcance pendiente: habilidades raciales, habilidades activas auxiliares, sistemas de restos por familia de monstruo, árboles de talentos más grandes, escalado de mobs por zona, balance final de la curva y efectos propios por especialización.
 
 ## Decisiones de diseño
 

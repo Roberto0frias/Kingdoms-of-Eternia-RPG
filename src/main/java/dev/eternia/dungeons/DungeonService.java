@@ -1,72 +1,90 @@
 package dev.eternia.dungeons;
 
 import dev.eternia.core.CharacterData;
+import dev.eternia.economy.EconomyData;
+import dev.eternia.progression.ProgressionData;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 import java.util.UUID;
 
+/** Per-player reward claims for a shared, naturally generated world ruin. */
 public final class DungeonService {
     public static final long COOLDOWN_TICKS = 24_000L;
+    private static final String DUNGEON_TAG = "eternia_dungeon=";
     private DungeonService() { }
 
-    public static DungeonData get(ServerPlayer player) { return player.getAttachedOrCreate(DungeonData.ATTACHMENT); }
+    public static DungeonData get(ServerPlayer player) {
+        return player.getAttachedOrCreate(DungeonData.ATTACHMENT);
+    }
 
-    public static void start(ServerPlayer player) {
-        if (!CharacterData.get(player).isCreated()) return;
-        DungeonData data = get(player);
-        if (data.active()) {
-            player.sendSystemMessage(Component.literal("Tu expedición sigue abierta. Busca a Iriel en la entrada de la Ruina del Umbral."));
+    public static void visit(ServerPlayer player, Entity npc) {
+        if (!CharacterData.get(player).isCreated()) {
+            player.sendSystemMessage(Component.literal("Iriel solo orienta a aventureros con un personaje creado."));
             return;
         }
+        String dungeonTag = npc.entityTags().stream().filter(tag -> tag.startsWith(DUNGEON_TAG)).findFirst().orElse("");
+        if (dungeonTag.isEmpty()) return;
+        String dungeonId = dungeonTag.substring(DUNGEON_TAG.length());
+        DungeonData data = get(player);
         long now = player.level().getGameTime();
         if (now < data.availableAt()) {
             long seconds = (data.availableAt() - now + 19) / 20;
-            player.sendSystemMessage(Component.literal("La ruina se estabilizará dentro de " + seconds + " segundos."));
+            player.sendSystemMessage(Component.literal("Iriel: Tu descanso termina en " + seconds + " segundos."));
             return;
         }
-        if (!(player.level() instanceof ServerLevel level)) return;
-        DungeonGenerator.Site site = DungeonGenerator.findSite(level, player.blockPosition().getX(),
-                player.blockPosition().getZ(), player.getUUID().getMostSignificantBits() ^ now);
-        if (site == null) {
-            player.sendSystemMessage(Component.literal("No encontramos terreno firme para la ruina. Aléjate de océanos o montañas e inténtalo otra vez."));
+        if (!dungeonId.equals(data.dungeonId())) {
+            if (data.active()) {
+                player.sendSystemMessage(Component.literal("Iriel: Primero reclama la recompensa de la Ruina del Umbral que ya exploraste."));
+                return;
+            }
+            data = data.begin(dungeonId, "world", npc.blockPosition().getX(), npc.blockPosition().getY(), npc.blockPosition().getZ());
+        }
+
+        var nearbyBosses = npc.level().getEntities(npc, npc.getBoundingBox().inflate(64.0),
+                entity -> entity.entityTags().contains(DungeonBosses.BOSS_TAG)
+                        && entity.entityTags().contains(DUNGEON_TAG + dungeonId) && entity.isAlive());
+        if (!nearbyBosses.isEmpty()) {
+            player.setAttached(DungeonData.ATTACHMENT, data);
+            player.sendSystemMessage(Component.literal("Iriel: Varkh aún protege la cámara final. Recorre el laberinto de 41 por 41 y prepara una carga para romper su guardia."));
             return;
         }
-        String dungeonId = UUID.randomUUID().toString();
-        DungeonGenerator.build(level, site, level.getSeed() ^ site.x() * 341873128712L ^ site.z() * 132897987541L ^ now);
-        if (DungeonNpc.spawn(level, site.x() + 1.5, site.y() + 1.0, site.z() + 1.5, dungeonId, player.getUUID()) == null
-                || DungeonBosses.spawn(level, site.x() + 19.5, site.y() + 1.0, site.z() + 19.5, dungeonId, player.getUUID()) == null) {
-            player.sendSystemMessage(Component.literal("La ruina se formó, pero sus guardianes no respondieron. Pide ayuda al administrador."));
+
+        if (!data.bossDefeated()) {
+            data = data.completeBoss();
+            player.setAttached(DungeonData.ATTACHMENT, data);
+        }
+        if (data.rewardClaimed()) {
+            player.sendSystemMessage(Component.literal("Iriel: Ya recibiste el botín de esta ruina. Descansa antes de reclamar otra."));
             return;
         }
-        data = data.begin(dungeonId, player.getUUID().toString(), site.x(), site.y(), site.z());
-        player.setAttached(DungeonData.ATTACHMENT, data);
-        player.sendSystemMessage(Component.literal("La Ruina del Umbral se ha formado cerca de tu posición. Coordenadas: "
-                + site.x() + ", " + site.y() + ", " + site.z() + "."));
-        player.sendSystemMessage(Component.literal("Encuentra a Iriel en la entrada, atraviesa el laberinto y derrota a Varkh."));
+        player.setAttached(DungeonData.ATTACHMENT, data.claim(now + COOLDOWN_TICKS));
+        ProgressionData.awardXp(player, 1_200);
+        EconomyData.award(player, 3_000);
+        ItemStack trophy = new ItemStack(Items.NETHER_STAR);
+        if (!player.getInventory().add(trophy)) player.drop(trophy, false);
+        player.sendSystemMessage(Component.literal("Iriel te entrega el Sello del Guardián: +1200 XP, +3000 Cobre y una Estrella del Nether."));
     }
 
-    public static void onBossDeath(Entity entity, MinecraftServer server) {
+    public static void onBossDeath(Entity entity, DamageSource source, MinecraftServer server) {
         if (!entity.entityTags().contains(DungeonBosses.BOSS_TAG)) return;
         DungeonBosses.remove(entity);
-        String ownerTag = DungeonBosses.ownerTagPrefix();
-        String ownerValue = entity.entityTags().stream().filter(tag -> tag.startsWith(ownerTag)).findFirst().orElse("");
-        if (ownerValue.isEmpty()) return;
-        UUID ownerId;
-        try { ownerId = UUID.fromString(ownerValue.substring(ownerTag.length())); }
-        catch (IllegalArgumentException ignored) { return; }
-        ServerPlayer owner = server.getPlayerList().getPlayer(ownerId);
-        if (owner == null) return;
-        DungeonData data = get(owner);
-        String dungeonTag = entity.entityTags().stream().filter(tag -> tag.startsWith("eternia_dungeon="))
-                .findFirst().orElse("");
-        if (!data.dungeonId().isEmpty() && dungeonTag.equals("eternia_dungeon=" + data.dungeonId())) {
-            owner.setAttached(DungeonData.ATTACHMENT, data.completeBoss());
-            owner.sendSystemMessage(Component.literal("Varkh ha caído. Vuelve con Iriel para reclamar la recompensa de la expedición."));
+        if (!(source.getEntity() instanceof ServerPlayer killer) || !CharacterData.get(killer).isCreated()) return;
+        String dungeonTag = entity.entityTags().stream().filter(tag -> tag.startsWith(DUNGEON_TAG)).findFirst().orElse("");
+        if (dungeonTag.isEmpty()) return;
+        String dungeonId = dungeonTag.substring(DUNGEON_TAG.length());
+        DungeonData data = get(killer);
+        if (data.active() && !dungeonId.equals(data.dungeonId())) return;
+        if (!dungeonId.equals(data.dungeonId())) {
+            data = data.begin(dungeonId, "world", entity.blockPosition().getX(), entity.blockPosition().getY(), entity.blockPosition().getZ());
         }
+        killer.setAttached(DungeonData.ATTACHMENT, data.completeBoss());
+        killer.sendSystemMessage(Component.literal("Varkh ha caído. Cualquier aventurero puede reclamar su parte hablando con Iriel."));
     }
 
     public static void register() { }
